@@ -8,7 +8,6 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 from PIL import Image
 
-# --- PATH SETUP ---
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from ai_agent.backend import AnalyticsAgent 
 from analytics.graph_algo import SuspiciousBehaviorDetector 
@@ -17,6 +16,11 @@ from analytics.visuals import generate_cluster_map
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 
+logo_path = "dashboard/assets/sauroneye.png" 
+try:
+    page_icon_img = Image.open(logo_path)
+except:
+    page_icon_img = "👁️"
 
 st.set_page_config(page_title="Sauron Eye", layout="wide", page_icon="👁️")
 
@@ -56,8 +60,12 @@ def load_data():
 
 # --- SIDEBAR ---
 with st.sidebar:
-    st.title("SAURON EYE")
-    st.caption("VERSION 5.0 (FINAL FIX)") 
+    try:
+        st.image(logo_path, use_container_width=True)
+    except:
+        st.write(" **SAURON EYE**")
+
+    st.caption("VERSION 5.0") 
     
     page = st.radio("Navigate", ["Network Overview", "Cluster Inspector", "Protocol Activity", "AI Analyst"])
     
@@ -74,9 +82,12 @@ with st.sidebar:
 
 header_ph = st.empty()
 content_ph = st.empty()
-
-with header_ph.container():
-    c1, c2 = st.columns([1, 15])
+c1, c2 = st.columns([1, 15])
+with c1: 
+    try:
+        st.image(logo_path, width=60)
+    except:
+        pass 
     with c2: st.markdown("# SAURON EYE")
     st.caption("The All-Seeing Lens for Babylon Chain")
     st.divider()
@@ -107,7 +118,7 @@ with content_ph.container():
 
     # 2. CLUSTER INSPECTOR
     elif page == "Cluster Inspector":
-        st.header("🕸️ Wallet Cluster Inspector")
+        st.header("Wallet Cluster Inspector")
         if df.empty:
             st.warning("No Data.")
         else:
