@@ -22,7 +22,7 @@ try:
 except:
     page_icon_img = "👁️"
 
-st.set_page_config(page_title="Sauron Eye", layout="wide", page_icon="👁️")
+st.set_page_config(page_title="Sauron Eye", layout="wide", page_icon=page_icon_img)
 
 st.markdown("""
     <style>
@@ -85,7 +85,7 @@ content_ph = st.empty()
 c1, c2 = st.columns([1, 15])
 with c1: 
     try:
-        st.image(logo_path, width=60)
+        st.image(logo_path, width=80)
     except:
         pass 
     with c2: st.markdown("# SAURON EYE")
