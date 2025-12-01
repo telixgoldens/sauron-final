@@ -58,7 +58,6 @@ def load_data():
     except:
         return pd.DataFrame(columns=['sender', 'amount', 'timestamp', 'tx_hash', 'tx_type', 'details', 'Risk Label'])
 
-# --- SIDEBAR ---
 with st.sidebar:
     try:
         st.image(logo_path, use_container_width=True)
@@ -80,18 +79,27 @@ with st.sidebar:
         except Exception as e:
             st.error(f"Error: {e}")
 
-header_ph = st.container() # Use container, not empty, for header to be stable
+header_ph = st.container() 
 content_ph = st.empty()
 
 with header_ph:
-    c1, c2 = st.columns([1, 15])
+    c1, c2 = st.columns([1, 7], gap="small")
     with c1: 
         try:
             st.image(logo_path, width=80)
         except:
             st.write("👁️")
     with c2: 
-        st.markdown("# SAURON EYE")
+        st.markdown("""
+            <h1 style='
+                margin-bottom: 0px; 
+                padding-top: 15px; 
+                font-size: 3.5rem;
+                line-height: 1.2;
+            '>
+                SAURON EYE
+            </h1>
+        """, unsafe_allow_html=True)
     
     st.caption("The All-Seeing Lens for Babylon Chain")
     st.divider()
