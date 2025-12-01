@@ -80,15 +80,19 @@ with st.sidebar:
         except Exception as e:
             st.error(f"Error: {e}")
 
-header_ph = st.empty()
+header_ph = st.container() # Use container, not empty, for header to be stable
 content_ph = st.empty()
-c1, c2 = st.columns([1, 15])
-with c1: 
-    try:
-        st.image(logo_path, width=80)
-    except:
-        pass 
-    with c2: st.markdown("# SAURON EYE")
+
+with header_ph:
+    c1, c2 = st.columns([1, 15])
+    with c1: 
+        try:
+            st.image(logo_path, width=80)
+        except:
+            st.write("👁️")
+    with c2: 
+        st.markdown("# SAURON EYE")
+    
     st.caption("The All-Seeing Lens for Babylon Chain")
     st.divider()
 
