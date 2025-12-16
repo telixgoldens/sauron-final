@@ -64,7 +64,7 @@ with st.sidebar:
     except:
         st.write(" **SAURON EYE**")
 
-    st.caption("VERSION 5.0") 
+    st.caption("VERSION 6.0") 
     
     page = st.radio("Navigate", ["Network Overview", "Cluster Inspector", "Protocol Activity", "AI Analyst"])
     
