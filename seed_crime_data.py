@@ -1,106 +1,139 @@
-import random
-import secrets
-from datetime import datetime, timedelta
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from database.schema import Transaction, Base
-from dotenv import load_dotenv
+import requests
+import pandas as pd
+import time
+from sqlalchemy import create_engine
 import os
+from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
-def run_seed():
-    """
-    Master Seed Function:
-    1. Creates Tables (if missing)
-    2. Clears Old Data
-    3. Plants 'Crime Scene' & 'Clusters'
-    """
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        raise ValueError("DATABASE_URL not found")
+BASE_URL = "https://babylon-api.polkachu.com" 
+DB_URL = os.getenv("DATABASE_URL")
 
-    engine = create_engine(db_url)
-    
-    Base.metadata.create_all(engine)
-    
-    Session = sessionmaker(bind=engine)
-    session = Session()
+def get_db_connection():
+    return create_engine(DB_URL)
 
-    print("Starting Master Seed Process...")
-
+def fetch_latest_height():
     try:
-        try:
-            session.execute(text("TRUNCATE TABLE transactions"))
-            session.commit()
-        except Exception:
-            session.rollback()
-            session.query(Transaction).delete()
-            session.commit()
-
-        SUSPECT_ADDR = "bbn1badguy9999999999999999999999999999999"
-        LAUNDER_A = "bbn1launderA..............................."
-        base_time = datetime.now() - timedelta(hours=2)
-
-        for i in range(12):
-            session.add(Transaction(
-                tx_hash=f"TX_FANOUT_{i}",
-                height=50000 + i,
-                sender=SUSPECT_ADDR,
-                amount=5000, 
-                timestamp=base_time + timedelta(minutes=i),
-                tx_type="Transfer"
-            ))
-
-        session.add(Transaction(tx_hash="TX_WASH_1", height=50100, sender=SUSPECT_ADDR, amount=10000, timestamp=base_time + timedelta(hours=1), tx_type="Transfer"))
-        session.add(Transaction(tx_hash="TX_WASH_2", height=50101, sender=LAUNDER_A, amount=10000, timestamp=base_time + timedelta(hours=1, minutes=5), tx_type="Transfer"))
-
-        HUB_ADDRESS = "bbn1_MASTER_MIND_999999999999999999999"
-        BOT_ARMY = [f"bbn1_bot_wallet_{i}_{secrets.token_hex(4)}" for i in range(20)]
-        NOW = datetime.now()
-
-        for i, bot in enumerate(BOT_ARMY):
-            session.add(Transaction(
-                tx_hash=f"TX_FUNDING_{i}_{secrets.token_hex(4)}",
-                height=60000 + i,
-                sender=HUB_ADDRESS, 
-                amount=random.randint(1000, 5000), 
-                timestamp=NOW - timedelta(minutes=60) + timedelta(seconds=i*10),
-                tx_type="BTC_Stake" 
-            ))
-
-        tx_count = 0
-        for i, bot in enumerate(BOT_ARMY):
-            for j in range(random.randint(3, 5)):
-                session.add(Transaction(
-                    tx_hash=f"TX_BOT_ACT_{i}_{j}",
-                    height=60050 + tx_count,
-                    sender=bot, 
-                    amount=random.randint(10, 50), 
-                    timestamp=NOW - timedelta(minutes=30) + timedelta(minutes=j),
-                    tx_type="Governance_Vote" 
-                ))
-                tx_count += 1
-
-        for i in range(50):
-            session.add(Transaction(
-                tx_hash=secrets.token_hex(16),
-                height=random.randint(40000, 49000),
-                sender=f"bbn1user{secrets.token_hex(4)}",
-                amount=random.randint(1, 100),
-                timestamp=base_time - timedelta(minutes=random.randint(0, 1000)),
-                tx_type="Transfer"
-            ))
-
-        session.commit()
-        print("ALL DATA INJECTED SUCCESSFULLY.")
-
+        url = f"{BASE_URL}/cosmos/base/tendermint/v1beta1/blocks/latest"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        return int(data['block']['header']['height'])
     except Exception as e:
-        session.rollback()
-        print(f"Error during seeding: {e}")
-        raise e 
-    finally:
-        session.close()
+        print(f"Error fetching height: {e}")
+        return None
+
+def parse_smart_details(msg):
+    """
+    Stolen from babylon_fetcher.py:
+    Identifies specific Babylon events and returns clean Type + Details.
+    """
+    raw_type = msg.get('@type', '')
+    
+    # 1. BTC STAKING
+    if 'MsgCreateBTCDelegation' in raw_type:
+        return "BTC_Stake", f"BTC PK: {msg.get('btc_pk_hex', '')[:10]}..."
+    
+    # 2. VALIDATOR OPS
+    if 'MsgDelegate' in raw_type:
+        return "Delegate", f"Validator: {msg.get('validator_address', '')[:10]}..."
+    if 'MsgUndelegate' in raw_type:
+        return "Undelegate", f"Validator: {msg.get('validator_address', '')[:10]}..."
+        
+    # 3. GOVERNANCE
+    if 'MsgVote' in raw_type:
+        return "Governance_Vote", f"Proposal ID: {msg.get('proposal_id', '?')} | Option: {msg.get('option', '?')}"
+        
+    # 4. TRANSFER
+    if 'MsgSend' in raw_type:
+        return "Transfer", f"To: {msg.get('to_address', '')[:10]}..."
+
+    
+    clean_name = raw_type.split('.')[-1].replace("Msg", "")
+    return clean_name, "None"
+
+def parse_tx(tx_response):
+    try:
+        tx_hash = tx_response['txhash']
+        timestamp = tx_response['timestamp']
+        
+        tx_body = tx_response['tx']['body']
+        if not tx_body['messages']: return None
+        
+        first_msg = tx_body['messages'][0]
+        
+        tx_type, details_str = parse_smart_details(first_msg)
+        
+        sender = "Unknown"
+        if 'sender' in first_msg: sender = first_msg['sender']
+        elif 'from_address' in first_msg: sender = first_msg['from_address']
+        elif 'delegator_address' in first_msg: sender = first_msg['delegator_address']
+        elif 'voter' in first_msg: sender = first_msg['voter']
+        elif 'signer' in first_msg: sender = first_msg['signer']
+            
+        amount = 0.0
+        amt_obj = first_msg.get('amount')
+        
+        if isinstance(amt_obj, list) and len(amt_obj) > 0:
+            amt_obj = amt_obj[0]
+            
+        if isinstance(amt_obj, dict):
+            raw_val = float(amt_obj.get('amount', 0))
+            denom = amt_obj.get('denom', 'ubbn')
+            
+            if denom == 'ubbn':
+                amount = raw_val / 1_000_000
+            else:
+                amount = raw_val 
+
+        return {
+            "timestamp": timestamp,
+            "tx_hash": tx_hash,
+            "sender": sender,
+            "amount": amount,
+            "tx_type": tx_type,
+            "details": details_str
+        }
+        
+    except Exception as e:
+        return None
+
+def run_seed():
+    print("Connecting to Babylon Mainnet (Smart Mode)...")
+    engine = get_db_connection()
+    
+    latest_height = fetch_latest_height()
+    if not latest_height:
+        print("API Error. Check internet.")
+        return
+    
+    print(f"Height: {latest_height}")
+    all_txs = []
+    
+    for h in range(latest_height, latest_height - 20, -1):
+        print(f"   Fetching Block {h}...")
+        try:
+            url = f"{BASE_URL}/cosmos/tx/v1beta1/txs/block/{h}"
+            resp = requests.get(url, timeout=5)
+            data = resp.json()
+            
+            if 'tx_responses' in data:
+                for tx in data['tx_responses']:
+                    parsed = parse_tx(tx)
+                    if parsed:
+                        all_txs.append(parsed)
+            time.sleep(0.1) 
+        except Exception:
+            continue
+
+    if all_txs:
+        print(f" Saving {len(all_txs)} transactions...")
+        df = pd.DataFrame(all_txs)
+        df.to_sql('transactions', engine, if_exists='replace', index=False)
+        print(" Database Updated!")
+    else:
+        print("No recent transactions found.")
 
 if __name__ == "__main__":
     run_seed()

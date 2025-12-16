@@ -163,7 +163,7 @@ class BabylonIndexer:
                 for i, resp in enumerate(responses):
                     try:
                         tx_hash = resp.get('txhash')
-                        timestamp_str = resp.get('timestamp', datetime.now().isoformat()) # Use block timestamp if available
+                        timestamp_str = resp.get('timestamp', datetime.now().isoformat()) 
                         
                         
                         body = None
